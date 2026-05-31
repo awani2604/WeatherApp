@@ -1,198 +1,320 @@
 import React, { useEffect, useRef, useState } from 'react'
 import './Weather.css'
  
-import Search_Icon  from '../assets/search.png'
-import cloud_Icon   from '../assets/cloud.png'
-import clear_Icon   from '../assets/clear.png'
-import rain_Icon    from '../assets/rain.png'
-import snow_Icon    from '../assets/snow.png'
-import drizzle_Icon from '../assets/drizzle.png'
-import wind_Icon    from '../assets/wind.png'
+import Search_Icon   from '../assets/search.png'
+import cloud_Icon    from '../assets/cloud.png'
+import clear_Icon    from '../assets/clear.png'
+import rain_Icon     from '../assets/rain.png'
+import snow_Icon     from '../assets/snow.png'
+import drizzle_Icon  from '../assets/drizzle.png'
+import wind_Icon     from '../assets/wind.png'
 import humidity_Icon from '../assets/humidity.png'
  
 const allIcons = {
-  "01d": clear_Icon,  "01n": clear_Icon,
-  "02d": cloud_Icon,  "02n": cloud_Icon,
-  "03d": cloud_Icon,  "03n": cloud_Icon,
-  "04d": drizzle_Icon,"04n": drizzle_Icon,
-  "09d": rain_Icon,   "09n": rain_Icon,
-  "10d": rain_Icon,   "10n": rain_Icon,
-  "13d": snow_Icon,   "13n": snow_Icon,
+  "01d": clear_Icon,   "01n": clear_Icon,
+  "02d": cloud_Icon,   "02n": cloud_Icon,
+  "03d": cloud_Icon,   "03n": cloud_Icon,
+  "04d": drizzle_Icon, "04n": drizzle_Icon,
+  "09d": rain_Icon,    "09n": rain_Icon,
+  "10d": rain_Icon,    "10n": rain_Icon,
+  "13d": snow_Icon,    "13n": snow_Icon,
 }
  
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
  
-/* ── Generate stars once ── */
-const STARS = Array.from({ length: 60 }, (_, i) => ({
+const STARS = Array.from({ length: 70 }, (_, i) => ({
   id: i,
-  size:   Math.random() * 2.5 + 1,
-  top:    Math.random() * 95,
+  size:   Math.random() * 2.5 + 0.8,
+  top:    Math.random() * 100,
   left:   Math.random() * 100,
   dur:    (2 + Math.random() * 4).toFixed(1) + 's',
-  delay:  (Math.random() * 5).toFixed(1) + 's',
+  delay:  (Math.random() * 6).toFixed(1) + 's',
   bright: (0.4 + Math.random() * 0.6).toFixed(2),
 }))
  
 const SHOOTS = Array.from({ length: 4 }, (_, i) => ({
   id: i,
-  top:    Math.random() * 40,
-  left:   Math.random() * 60,
-  sdur:   (1.5 + Math.random() * 1.5).toFixed(1) + 's',
-  sdelay: (i * 4 + Math.random() * 4).toFixed(1) + 's',
+  top:    5 + Math.random() * 35,
+  left:   5 + Math.random() * 55,
+  sdur:   (1.2 + Math.random() * 1.5).toFixed(1) + 's',
+  sdelay: (i * 5 + Math.random() * 5).toFixed(1) + 's',
 }))
  
-const Weather = () => {
-  const [weatherData, setWeatherData] = useState(null)
-  const [forecast, setForecast]       = useState([])
-  const [activeDay, setActiveDay]     = useState(0)
-  const inputRef = useRef()
+/* ── Gemini AI suggestions ── */
+const fetchAISuggestions = async (location, desc, temp, humidity, wind) => {
+  const prompt = `You are a helpful weather assistant. Given the current weather, give personalized suggestions in Hinglish (mix of Hindi and English).
  
-  /* ── Fetch current weather ── */
-  const fetchCurrent = async (city) => {
-    const url = `https://api.openweathermap.org/data/2.5/weather?q=${city}&units=metric&appid=${import.meta.env.VITE_APP_ID}`
+Current weather in ${location}:
+- Condition: ${desc}
+- Temperature: ${temp}°C
+- Humidity: ${humidity}%
+- Wind Speed: ${wind} km/h
+ 
+Give exactly this JSON format and nothing else:
+{
+  "precautions": ["item1", "item2", "item3", "item4"],
+  "songs": ["item1", "item2", "item3", "item4"],
+  "food": ["item1", "item2", "item3", "item4"]
+}
+ 
+Each item should have a relevant emoji at the start. Precautions should be practical safety tips. Songs should match the weather mood (mix of Hindi & English). Food should suit the weather. Keep each item short (max 8 words). Respond ONLY with the JSON, no extra text.`
+ 
+  const apiKey = import.meta.env.VITE_GROQ_API_KEY
+  if (!apiKey) throw new Error('Groq API key not found')
+ 
+  const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model: 'llama-3.1-8b-instant',
+      messages: [{ role: 'user', content: prompt }],
+      max_tokens: 1000,
+      temperature: 0.7,
+    }),
+  })
+ 
+  if (response.status === 429) throw new Error('429')
+  if (!response.ok) throw new Error(`API error: ${response.status}`)
+ 
+  const data = await response.json()
+  const text = data.choices?.[0]?.message?.content || ''
+  const clean = text.replace(/```json|```/g, '').trim()
+  return JSON.parse(clean)
+}
+ 
+const Weather = () => {
+  const [weatherData,   setWeatherData]   = useState(null)
+  const [forecast,      setForecast]      = useState([])
+  const [activeDay,     setActiveDay]     = useState(0)
+  const [unit,          setUnit]          = useState('C')
+  const [loading,       setLoading]       = useState(false)
+  const [error,         setError]         = useState('')
+  const [locating,      setLocating]      = useState(false)
+  const [aiSuggestions, setAiSuggestions] = useState(null)
+  const [aiLoading,     setAiLoading]     = useState(false)
+  const [aiError,       setAiError]       = useState('')
+ 
+  const inputRef   = useRef()
+  const aiCacheRef = useRef({})
+ 
+  const toDisplay = (tempC) =>
+    unit === 'C' ? `${tempC}°C` : `${Math.round(tempC * 9 / 5 + 32)}°F`
+ 
+  const fetchCurrent = async (query) => {
+    const url = `https://api.openweathermap.org/data/2.5/weather?${query}&units=metric&appid=${import.meta.env.VITE_APP_ID}`
     const res  = await fetch(url)
     const data = await res.json()
-    if (data.cod === "404") throw new Error("City not found")
- 
+    if (!res.ok) throw new Error(data.message || 'City not found')
     return {
       humidity  : data.main.humidity,
       location  : data.name,
       country   : data.sys.country,
-      temp      : Math.floor(data.main.temp),
-      feelsLike : Math.floor(data.main.feels_like),
+      tempC     : Math.floor(data.main.temp),
+      feelsLikeC: Math.floor(data.main.feels_like),
       windSpeed : data.wind.speed,
       desc      : data.weather[0].description,
       icon      : allIcons[data.weather[0].icon] || clear_Icon,
     }
   }
  
-  /* ── Fetch 5-day forecast ── */
-  const fetchForecast = async (city) => {
-    const url = `https://api.openweathermap.org/data/2.5/forecast?q=${city}&units=metric&cnt=40&appid=${import.meta.env.VITE_APP_ID}`
+  const fetchForecast = async (query) => {
+    const url = `https://api.openweathermap.org/data/2.5/forecast?${query}&units=metric&cnt=40&appid=${import.meta.env.VITE_APP_ID}`
     const res  = await fetch(url)
     const data = await res.json()
-    if (data.cod !== "200") return []
- 
-    // one entry per day (noon reading)
+    if (!res.ok) return []
     const seen = new Set()
     return data.list
       .filter(item => {
-        const d = new Date(item.dt * 1000)
-        const dateStr = d.toDateString()
-        if (seen.has(dateStr)) return false
-        seen.add(dateStr)
-        return true
+        const key = new Date(item.dt * 1000).toDateString()
+        if (seen.has(key)) return false
+        seen.add(key); return true
       })
       .slice(0, 5)
-      .map(item => {
-        const d = new Date(item.dt * 1000)
-        return {
-          dayName : DAY_NAMES[d.getDay()],
-          hi      : Math.floor(item.main.temp_max),
-          lo      : Math.floor(item.main.temp_min),
-          icon    : allIcons[item.weather[0].icon] || clear_Icon,
-        }
-      })
+      .map(item => ({
+        dayName : DAY_NAMES[new Date(item.dt * 1000).getDay()],
+        hiC     : Math.floor(item.main.temp_max),
+        loC     : Math.floor(item.main.temp_min),
+        icon    : allIcons[item.weather[0].icon] || clear_Icon,
+      }))
   }
  
-  /* ── Search handler ── */
-  const search = async (city) => {
-    if (!city.trim()) { alert("Please enter a city name!"); return }
+  const loadAISuggestions = async (current) => {
+    const cacheKey = `${current.location}_${current.desc}_${current.tempC}`
+    if (aiCacheRef.current[cacheKey]) {
+      setAiSuggestions(aiCacheRef.current[cacheKey])
+      return
+    }
+    setAiLoading(true); setAiError(''); setAiSuggestions(null)
+    try {
+      const sug = await fetchAISuggestions(
+        current.location, current.desc, current.tempC, current.humidity, current.windSpeed
+      )
+      aiCacheRef.current[cacheKey] = sug
+      setAiSuggestions(sug)
+    } catch (e) {
+      if (e?.message === '429') setAiError('Rate limit ho gayi. 1 minute baad Retry karein.')
+      else if (e?.message?.includes('key not found')) setAiError('VITE_GROQ_API_KEY .env mein set nahi hai.')
+      else setAiError('AI suggestions load nahi ho sakin. Retry karein.')
+    } finally {
+      setAiLoading(false)
+    }
+  }
+ 
+  const search = async (query) => {
+    setLoading(true); setError(''); setAiSuggestions(null)
     try {
       const [current, fcst] = await Promise.all([
-        fetchCurrent(city),
-        fetchForecast(city),
+        fetchCurrent(query),
+        fetchForecast(query),
       ])
       setWeatherData(current)
       setForecast(fcst)
       setActiveDay(0)
-    } catch {
-      alert("City not found! Please enter a valid city name.")
+      loadAISuggestions(current)
+    } catch (e) {
+      setError(e.message || 'City not found!')
+    } finally {
+      setLoading(false)
     }
   }
  
-  useEffect(() => { search("London") }, [])
+  const searchByCity = (city) => {
+    if (!city.trim()) { setError('Please enter a city name!'); return }
+    search(`q=${encodeURIComponent(city)}`)
+  }
+ 
+  const searchByLocation = () => {
+    if (!navigator.geolocation) { setError('Geolocation not supported'); return }
+    setLocating(true); setError('')
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) => {
+        setLocating(false)
+        search(`lat=${coords.latitude}&lon=${coords.longitude}`)
+      },
+      (err) => {
+        setLocating(false)
+        if (err.code === 1)      setError('Location permission denied. Browser settings mein allow karein.')
+        else if (err.code === 2) setError('Location unavailable. Device GPS check karein.')
+        else                     setError('Location timeout. Dobara try karein.')
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+    )
+  }
+ 
+  useEffect(() => { searchByCity('London') }, [])
  
   return (
     <div className='Weather'>
  
-      {/* Twinkling Stars */}
       {STARS.map(s => (
         <span key={s.id} className='star' style={{
-          width: s.size + 'px',
-          height: s.size + 'px',
-          top: s.top + '%',
-          left: s.left + '%',
-          '--dur': s.dur,
-          '--delay': s.delay,
-          '--bright': s.bright,
+          width: s.size + 'px', height: s.size + 'px',
+          top: s.top + '%', left: s.left + '%',
+          '--dur': s.dur, '--delay': s.delay, '--bright': s.bright,
         }} />
       ))}
- 
-      {/* Shooting Stars */}
       {SHOOTS.map(s => (
         <span key={s.id} className='shooting-star' style={{
-          top: s.top + '%',
-          left: s.left + '%',
-          '--sdur': s.sdur,
-          '--sdelay': s.sdelay,
+          top: s.top + '%', left: s.left + '%',
+          '--sdur': s.sdur, '--sdelay': s.sdelay,
         }} />
       ))}
  
-      {/* Search */}
-      <div className='search-bar'>
-        <input
-          ref={inputRef}
-          type='text'
-          placeholder='Search city...'
-          onKeyDown={e => e.key === 'Enter' && search(inputRef.current.value)}
-        />
-        <img
-          src={Search_Icon}
-          alt='Search'
-          onClick={() => search(inputRef.current.value)}
-        />
+      <div className='top-bar'>
+        <div className='search-bar'>
+          <input
+            ref={inputRef}
+            type='text'
+            placeholder='Search city...'
+            onKeyDown={e => e.key === 'Enter' && searchByCity(inputRef.current.value)}
+          />
+          <button className='icon-btn' onClick={() => searchByCity(inputRef.current.value)} aria-label='Search'>
+            <img src={Search_Icon} alt='' />
+          </button>
+        </div>
+ 
+        <button
+          className={`icon-btn gps-btn${locating ? ' spinning' : ''}`}
+          onClick={searchByLocation}
+          title='Use my location'
+        >📍</button>
+ 
+        <button className='unit-toggle' onClick={() => setUnit(u => u === 'C' ? 'F' : 'C')}>
+          <span className={unit === 'C' ? 'active' : ''}>°C</span>
+          <span className='sep'>|</span>
+          <span className={unit === 'F' ? 'active' : ''}>°F</span>
+        </button>
       </div>
  
-      {/* Main weather */}
-      {weatherData && (
-        <>
-          {/* Icon */}
-          <div className='weather-icon-wrap'>
-            <img src={weatherData.icon} alt='weather icon' className='weather-icon' />
-          </div>
+      {loading && <p className='status-msg'>Fetching weather...</p>}
+      {error   && <p className='status-msg error'>{error}</p>}
  
-          {/* Temp */}
-          <p className='temperature'>{weatherData.temp}°C</p>
+      {!loading && weatherData && (
+        <div className='weather-body'>
  
-          {/* Description + location */}
-          <p className='location'>
-            {weatherData.desc} &nbsp;·&nbsp; {weatherData.location}, {weatherData.country}
-          </p>
+          {/* activeDay=0 toh current weather, otherwise forecast day */}
+          {(() => {
+            const isToday = activeDay === 0 || forecast.length === 0
+            const displayIcon = isToday ? weatherData.icon : forecast[activeDay].icon
+            const displayTemp = isToday ? weatherData.tempC : forecast[activeDay].hiC
+            const displayDesc = isToday ? weatherData.desc : forecast[activeDay].dayName + ' ka mausam'
+            return (
+              <>
+                <div className='weather-icon-wrap'>
+                  <img src={displayIcon} alt='weather' className='weather-icon' />
+                </div>
+                <p className='temperature'>{toDisplay(displayTemp)}</p>
+                <p className='weather-desc'>{displayDesc}</p>
+                <p className='location'>📍 {weatherData.location}, {weatherData.country}</p>
  
-          {/* Stats */}
-          <div className='weather-data'>
-            <div className='col'>
-              <img src={wind_Icon} alt='wind' />
-              <p>{weatherData.windSpeed} km/h</p>
-              <span>Wind</span>
-            </div>
-            <div className='col'>
-              <img src={humidity_Icon} alt='humidity' />
-              <p>{weatherData.humidity}%</p>
-              <span>Humidity</span>
-            </div>
-            <div className='col'>
-              <img src={clear_Icon} alt='feels like' />
-              <p>{weatherData.feelsLike}°C</p>
-              <span>Feels Like</span>
-            </div>
-          </div>
+                <div className='weather-data'>
+                  {isToday ? (
+                    <>
+                      <div className='col'>
+                        <img src={wind_Icon} alt='wind' />
+                        <p>{weatherData.windSpeed} <small>km/h</small></p>
+                        <span>Wind</span>
+                      </div>
+                      <div className='col'>
+                        <img src={humidity_Icon} alt='humidity' />
+                        <p>{weatherData.humidity}<small>%</small></p>
+                        <span>Humidity</span>
+                      </div>
+                      <div className='col'>
+                        <img src={clear_Icon} alt='feels like' />
+                        <p>{toDisplay(weatherData.feelsLikeC)}</p>
+                        <span>Feels Like</span>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className='col'>
+                        <img src={clear_Icon} alt='high' />
+                        <p>{toDisplay(forecast[activeDay].hiC)}</p>
+                        <span>High</span>
+                      </div>
+                      <div className='col'>
+                        <img src={wind_Icon} alt='low' />
+                        <p>{toDisplay(forecast[activeDay].loC)}</p>
+                        <span>Low</span>
+                      </div>
+                      <div className='col'>
+                        <img src={cloud_Icon} alt='day' />
+                        <p>{forecast[activeDay].dayName}</p>
+                        <span>Day</span>
+                      </div>
+                    </>
+                  )}
+                </div>
+              </>
+            )
+          })()}
  
-          {/* Divider */}
           <div className='divider' />
  
-          {/* 5-Day Forecast */}
           {forecast.length > 0 && (
             <>
               <p className='forecast-title'>5-Day Forecast</p>
@@ -204,20 +326,55 @@ const Weather = () => {
                     onClick={() => setActiveDay(i)}
                   >
                     <span className='day-name'>{day.dayName}</span>
-                    <img src={day.icon} alt='forecast icon' />
-                    <span className='day-hi'>{day.hi}°</span>
-                    <span className='day-lo'>{day.lo}°</span>
+                    <img src={day.icon} alt='forecast' />
+                    <span className='day-hi'>{toDisplay(day.hiC)}</span>
+                    <span className='day-lo'>{toDisplay(day.loC)}</span>
                   </div>
                 ))}
               </div>
             </>
           )}
-        </>
+ 
+          <div className='divider' style={{ marginTop: '24px' }} />
+          <p className='forecast-title'>✨ AI Suggestions</p>
+ 
+          {aiLoading && (
+            <div className='ai-loading'>
+              <span className='ai-dot' /><span className='ai-dot' /><span className='ai-dot' />
+              <span className='ai-loading-text'>AI soch raha hai...</span>
+            </div>
+          )}
+ 
+          {aiError && (
+            <div className='ai-error-wrap'>
+              <p className='ai-error-text'>{aiError}</p>
+              <button className='ai-retry-btn' onClick={() => loadAISuggestions(weatherData)}>
+                🔄 Retry
+              </button>
+            </div>
+          )}
+ 
+          {aiSuggestions && (
+            <div className='suggestions-list'>
+              <div className='sug-section'>
+                <p className='sug-heading'>⚠️ Precautions</p>
+                {aiSuggestions.precautions.map((s, i) => <p key={i} className='sug-item'>{s}</p>)}
+              </div>
+              <div className='sug-section'>
+                <p className='sug-heading'>🎵 Songs to Listen</p>
+                {aiSuggestions.songs.map((s, i) => <p key={i} className='sug-item'>{s}</p>)}
+              </div>
+              <div className='sug-section'>
+                <p className='sug-heading'>🍽️ What to Eat</p>
+                {aiSuggestions.food.map((s, i) => <p key={i} className='sug-item'>{s}</p>)}
+              </div>
+            </div>
+          )}
+ 
+        </div>
       )}
     </div>
   )
 }
  
 export default Weather
- 
- 
