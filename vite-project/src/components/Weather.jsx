@@ -40,7 +40,7 @@ const SHOOTS = Array.from({ length: 4 }, (_, i) => ({
   sdelay: (i * 5 + Math.random() * 5).toFixed(1) + 's',
 }))
  
-/* ── Gemini AI suggestions ── */
+/* ── AI suggestions ── */
 const fetchAISuggestions = async (location, desc, temp, humidity, wind) => {
   const prompt = `You are a helpful weather assistant. Given the current weather, give personalized suggestions in Hinglish (mix of Hindi and English).
  
@@ -209,19 +209,7 @@ const Weather = () => {
   return (
     <div className='Weather'>
  
-      {STARS.map(s => (
-        <span key={s.id} className='star' style={{
-          width: s.size + 'px', height: s.size + 'px',
-          top: s.top + '%', left: s.left + '%',
-          '--dur': s.dur, '--delay': s.delay, '--bright': s.bright,
-        }} />
-      ))}
-      {SHOOTS.map(s => (
-        <span key={s.id} className='shooting-star' style={{
-          top: s.top + '%', left: s.left + '%',
-          '--sdur': s.sdur, '--sdelay': s.sdelay,
-        }} />
-      ))}
+      
  
       <div className='top-bar'>
         <div className='search-bar'>

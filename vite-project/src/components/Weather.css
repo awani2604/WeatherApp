@@ -32,32 +32,8 @@
   pointer-events: none;
 }
  
-/* ─── Stars ─── */
-.star {
-  position: absolute;
-  background: #fff;
-  border-radius: 50%;
-  pointer-events: none;
-  animation: twinkle var(--dur) ease-in-out infinite var(--delay);
-}
-@keyframes twinkle {
-  0%, 100% { opacity: 0;   transform: scale(0.6); }
-  50%       { opacity: var(--bright); transform: scale(1.2); }
-}
-.shooting-star {
-  position: absolute;
-  width: 90px; height: 1.5px;
-  background: linear-gradient(90deg, rgba(255,255,255,0.9), transparent);
-  border-radius: 2px;
-  pointer-events: none;
-  opacity: 0;
-  animation: shoot var(--sdur) ease-in infinite var(--sdelay);
-}
-@keyframes shoot {
-  0%   { opacity: 0; transform: translateX(0) translateY(0) rotate(-30deg); }
-  10%  { opacity: 1; }
-  100% { opacity: 0; transform: translateX(200px) translateY(90px) rotate(-30deg); }
-}
+
+
  
 /* ─── Top Bar ─── */
 .top-bar {
