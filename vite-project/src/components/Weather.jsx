@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react'
 import './Weather.css'
- 
+
 import Search_Icon   from '../assets/search.png'
 import cloud_Icon    from '../assets/cloud.png'
 import clear_Icon    from '../assets/clear.png'
@@ -9,7 +9,7 @@ import snow_Icon     from '../assets/snow.png'
 import drizzle_Icon  from '../assets/drizzle.png'
 import wind_Icon     from '../assets/wind.png'
 import humidity_Icon from '../assets/humidity.png'
- 
+
 const allIcons = {
   "01d": clear_Icon,   "01n": clear_Icon,
   "02d": cloud_Icon,   "02n": cloud_Icon,
@@ -19,49 +19,31 @@ const allIcons = {
   "10d": rain_Icon,    "10n": rain_Icon,
   "13d": snow_Icon,    "13n": snow_Icon,
 }
- 
+
 const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
- 
-const STARS = Array.from({ length: 70 }, (_, i) => ({
-  id: i,
-  size:   Math.random() * 2.5 + 0.8,
-  top:    Math.random() * 100,
-  left:   Math.random() * 100,
-  dur:    (2 + Math.random() * 4).toFixed(1) + 's',
-  delay:  (Math.random() * 6).toFixed(1) + 's',
-  bright: (0.4 + Math.random() * 0.6).toFixed(2),
-}))
- 
-const SHOOTS = Array.from({ length: 4 }, (_, i) => ({
-  id: i,
-  top:    5 + Math.random() * 35,
-  left:   5 + Math.random() * 55,
-  sdur:   (1.2 + Math.random() * 1.5).toFixed(1) + 's',
-  sdelay: (i * 5 + Math.random() * 5).toFixed(1) + 's',
-}))
- 
+
 /* ── AI suggestions ── */
 const fetchAISuggestions = async (location, desc, temp, humidity, wind) => {
   const prompt = `You are a helpful weather assistant. Given the current weather, give personalized suggestions in Hinglish (mix of Hindi and English).
- 
+
 Current weather in ${location}:
 - Condition: ${desc}
 - Temperature: ${temp}°C
 - Humidity: ${humidity}%
 - Wind Speed: ${wind} km/h
- 
+
 Give exactly this JSON format and nothing else:
 {
   "precautions": ["item1", "item2", "item3", "item4"],
   "songs": ["item1", "item2", "item3", "item4"],
   "food": ["item1", "item2", "item3", "item4"]
 }
- 
+
 Each item should have a relevant emoji at the start. Precautions should be practical safety tips. Songs should match the weather mood (mix of Hindi & English). Food should suit the weather. Keep each item short (max 8 words). Respond ONLY with the JSON, no extra text.`
- 
+
   const apiKey = import.meta.env.VITE_GROQ_API_KEY
   if (!apiKey) throw new Error('Groq API key not found')
- 
+
   const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -75,16 +57,16 @@ Each item should have a relevant emoji at the start. Precautions should be pract
       temperature: 0.7,
     }),
   })
- 
+
   if (response.status === 429) throw new Error('429')
   if (!response.ok) throw new Error(`API error: ${response.status}`)
- 
+
   const data = await response.json()
   const text = data.choices?.[0]?.message?.content || ''
   const clean = text.replace(/```json|```/g, '').trim()
   return JSON.parse(clean)
 }
- 
+
 const Weather = () => {
   const [weatherData,   setWeatherData]   = useState(null)
   const [forecast,      setForecast]      = useState([])
@@ -96,13 +78,13 @@ const Weather = () => {
   const [aiSuggestions, setAiSuggestions] = useState(null)
   const [aiLoading,     setAiLoading]     = useState(false)
   const [aiError,       setAiError]       = useState('')
- 
+
   const inputRef   = useRef()
   const aiCacheRef = useRef({})
- 
+
   const toDisplay = (tempC) =>
     unit === 'C' ? `${tempC}°C` : `${Math.round(tempC * 9 / 5 + 32)}°F`
- 
+
   const fetchCurrent = async (query) => {
     const url = `https://api.openweathermap.org/data/2.5/weather?${query}&units=metric&appid=${import.meta.env.VITE_APP_ID}`
     const res  = await fetch(url)
@@ -119,7 +101,7 @@ const Weather = () => {
       icon      : allIcons[data.weather[0].icon] || clear_Icon,
     }
   }
- 
+
   const fetchForecast = async (query) => {
     const url = `https://api.openweathermap.org/data/2.5/forecast?${query}&units=metric&cnt=40&appid=${import.meta.env.VITE_APP_ID}`
     const res  = await fetch(url)
@@ -140,7 +122,7 @@ const Weather = () => {
         icon    : allIcons[item.weather[0].icon] || clear_Icon,
       }))
   }
- 
+
   const loadAISuggestions = async (current) => {
     const cacheKey = `${current.location}_${current.desc}_${current.tempC}`
     if (aiCacheRef.current[cacheKey]) {
@@ -162,7 +144,7 @@ const Weather = () => {
       setAiLoading(false)
     }
   }
- 
+
   const search = async (query) => {
     setLoading(true); setError(''); setAiSuggestions(null)
     try {
@@ -180,12 +162,24 @@ const Weather = () => {
       setLoading(false)
     }
   }
- 
+
+  // ✅ Validation yahan hai
   const searchByCity = (city) => {
-    if (!city.trim()) { setError('Please enter a city name!'); return }
-    search(`q=${encodeURIComponent(city)}`)
+    const trimmed = city.trim()
+
+    if (!trimmed) {
+      setError('Please enter a city name!')
+      return
+    }
+
+    if (!/^[a-zA-Z\s\-\.]+$/.test(trimmed)) {
+      setError('Invalid city name! Sirf letters use karein.')
+      return
+    }
+
+    search(`q=${encodeURIComponent(trimmed)}`)
   }
- 
+
   const searchByLocation = () => {
     if (!navigator.geolocation) { setError('Geolocation not supported'); return }
     setLocating(true); setError('')
@@ -203,14 +197,12 @@ const Weather = () => {
       { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
     )
   }
- 
+
   useEffect(() => { searchByCity('London') }, [])
- 
+
   return (
     <div className='Weather'>
- 
-      
- 
+
       <div className='top-bar'>
         <div className='search-bar'>
           <input
@@ -223,27 +215,26 @@ const Weather = () => {
             <img src={Search_Icon} alt='' />
           </button>
         </div>
- 
+
         <button
           className={`icon-btn gps-btn${locating ? ' spinning' : ''}`}
           onClick={searchByLocation}
           title='Use my location'
         >📍</button>
- 
+
         <button className='unit-toggle' onClick={() => setUnit(u => u === 'C' ? 'F' : 'C')}>
           <span className={unit === 'C' ? 'active' : ''}>°C</span>
           <span className='sep'>|</span>
           <span className={unit === 'F' ? 'active' : ''}>°F</span>
         </button>
       </div>
- 
+
       {loading && <p className='status-msg'>Fetching weather...</p>}
       {error   && <p className='status-msg error'>{error}</p>}
- 
+
       {!loading && weatherData && (
         <div className='weather-body'>
- 
-          {/* activeDay=0 toh current weather, otherwise forecast day */}
+
           {(() => {
             const isToday = activeDay === 0 || forecast.length === 0
             const displayIcon = isToday ? weatherData.icon : forecast[activeDay].icon
@@ -257,7 +248,7 @@ const Weather = () => {
                 <p className='temperature'>{toDisplay(displayTemp)}</p>
                 <p className='weather-desc'>{displayDesc}</p>
                 <p className='location'>📍 {weatherData.location}, {weatherData.country}</p>
- 
+
                 <div className='weather-data'>
                   {isToday ? (
                     <>
@@ -300,9 +291,9 @@ const Weather = () => {
               </>
             )
           })()}
- 
+
           <div className='divider' />
- 
+
           {forecast.length > 0 && (
             <>
               <p className='forecast-title'>5-Day Forecast</p>
@@ -322,17 +313,17 @@ const Weather = () => {
               </div>
             </>
           )}
- 
+
           <div className='divider' style={{ marginTop: '24px' }} />
           <p className='forecast-title'>✨ AI Suggestions</p>
- 
+
           {aiLoading && (
             <div className='ai-loading'>
               <span className='ai-dot' /><span className='ai-dot' /><span className='ai-dot' />
               <span className='ai-loading-text'>AI soch raha hai...</span>
             </div>
           )}
- 
+
           {aiError && (
             <div className='ai-error-wrap'>
               <p className='ai-error-text'>{aiError}</p>
@@ -341,7 +332,7 @@ const Weather = () => {
               </button>
             </div>
           )}
- 
+
           {aiSuggestions && (
             <div className='suggestions-list'>
               <div className='sug-section'>
@@ -358,11 +349,11 @@ const Weather = () => {
               </div>
             </div>
           )}
- 
+
         </div>
       )}
     </div>
   )
 }
- 
+
 export default Weather
