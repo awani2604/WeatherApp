@@ -24,8 +24,11 @@ const DAY_NAMES = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat']
 
 /* ── AI suggestions ── */
 const fetchAISuggestions = async (location, desc, temp, humidity, wind) => {
-  const prompt = `You are a helpful weather assistant. Given the current weather, give personalized suggestions in Hinglish (mix of Hindi and English).
-
+  const prompt = `You are a helpful weather assistant.Songs should match the weather mood.
+Song language rules:
+- If country is India (IN), suggest Hindi and English songs.
+- If country is outside India, suggest  songs of there country only.
+- Choose songs popular in that region.
 Current weather in ${location}:
 - Condition: ${desc}
 - Temperature: ${temp}°C
@@ -39,7 +42,7 @@ Give exactly this JSON format and nothing else:
   "food": ["item1", "item2", "item3", "item4"]
 }
 
-Each item should have a relevant emoji at the start. Precautions should be practical safety tips. Songs should match the weather mood (mix of Hindi & English). Food should suit the weather. Keep each item short (max 8 words). Respond ONLY with the JSON, no extra text.`
+Each item should have a relevant emoji at the start. Precautions should be practical safety tips. Songs should match the weather mood and country location(but don't show the country name and language name like hindi or english). Food should suit the weather. Keep each item short (max 8 words). Respond ONLY with the JSON, no extra text.`
 
   const apiKey = import.meta.env.VITE_GROQ_API_KEY
   if (!apiKey) throw new Error('Groq API key not found')
@@ -320,7 +323,7 @@ const Weather = () => {
           {aiLoading && (
             <div className='ai-loading'>
               <span className='ai-dot' /><span className='ai-dot' /><span className='ai-dot' />
-              <span className='ai-loading-text'>AI soch raha hai...</span>
+              <span className='ai-loading-text'>Loading...</span>
             </div>
           )}
 
